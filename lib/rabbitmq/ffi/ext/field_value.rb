@@ -33,27 +33,32 @@ module RabbitMQ
         value.free! if value.respond_to? :free!
         self
       end
-      
+
       def apply(value)
-        self[:kind], self[:value] = case value
-        when ::String; [:utf8,  FieldValueValue.new(Bytes.from_s(value.encode(Encoding::UTF_8)).pointer)]
-        when ::Symbol; [:utf8,  FieldValueValue.new(Bytes.from_s(value.to_s.encode!(Encoding::UTF_8)).pointer)]
-        when ::Array;  [:array, FieldValueValue.new(Array.from_a(value).pointer)]
-        when ::Hash;   [:table, FieldValueValue.new(Table.from(value).pointer)]
-        when 1.class;  [:i64,       (v=FieldValueValue.new; v[:i64]=value; v)]
-        when ::Float;  [:f64,       (v=FieldValueValue.new; v[:f64]=value; v)]
-        when ::Time;   [:timestamp, (v=FieldValueValue.new; v[:u64]=value.to_i; v)]
-        when true;     [:boolean,   (v=FieldValueValue.new; v[:boolean]=true; v)]
-        when false;    [:boolean,   (v=FieldValueValue.new; v[:boolean]=false; v)]
-        else raise NotImplementedError, "#{self.class}.from(#<#{value.class}>)"
-        end
+        self[:kind], self[:value] =
+          case value
+          when ::String  then [:utf8,      FieldValueValue.new(Bytes.from_s(value.encode(Encoding::UTF_8)).pointer)]
+          when ::Symbol  then [:utf8,      FieldValueValue.new(Bytes.from_s(value.to_s.encode!(Encoding::UTF_8)).pointer)]
+          when ::Array   then [:array,     FieldValueValue.new(Array.from_a(value).pointer)]
+          when ::Hash    then [:table,     FieldValueValue.new(Table.from(value).pointer)]
+          when ::Float   then [:f64,       FieldValueValue.new.tap { |v| v[:f64] = value }]
+          when ::Time    then [:timestamp, FieldValueValue.new.tap { |v| v[:u64] = value.to_i }]
+          when true      then [:boolean,   FieldValueValue.new.tap { |v| v[:boolean] = true }]
+          when false     then [:boolean,   FieldValueValue.new.tap { |v| v[:boolean] = false }]
+          when ::Integer
+            if -(2**31) < value && value < 2**31 - 1
+              [:i32, FieldValueValue.new.tap { |v| v[:i32] = value }]
+            else
+              [:i64, FieldValueValue.new.tap { |v| v[:i64] = value }]
+            end
+          else raise NotImplementedError, "#{self.class}.from(#<#{value.class}>)"
+          end
         self
       end
-      
+
       def self.from(value)
         new.apply(value)
       end
     end
-    
   end
 end
